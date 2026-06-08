@@ -7,11 +7,11 @@ from bleak.exc import BleakError
 
 # 设备信息
 TARGET_NAME = "47L124000"
-CHAR_WRITE_UUID = "0000150a-0000-1000-8000-00805f9b34fb"   # 写特征 (0x150A)
-CHAR_NOTIFY_UUID = "0000150b-0000-1000-8000-00805f9b34fb"  # 通知特征 (0x150B)
+CHAR_WRITE_UUID = "0000150a-0000-1000-8000-00805f9b34fb"   # 写特征 (0x180C -> 0x150A)
+CHAR_NOTIFY_UUID = "0000150b-0000-1000-8000-00805f9b34fb"  # 通知特征 (0x180C -> 0x150B)
 
-# B0 指令（17 字节）：HEAD(B0) + 颜色(01) + 启动上报(D0) + 固定(64) + 13 字节填充 00
-B0_CMD = bytes.fromhex("B001D064" + "00" * 13)
+# 正确的启动指令：0x50 01 D0 + 7字节填充 00（共10字节）
+B0_CMD = bytes.fromhex("5001D0" + "00" * 7)
 
 def parse_pressure(data: bytearray) -> float | None:
     """
@@ -71,7 +71,7 @@ async def main():
     async with BleakClient(device) as client:
         print("已连接")
 
-        # 3. 先开启 Notify（监听 0x150B）—— 必须在此之前绑定通知
+        # 3. 先开启 Notify（监听 0x180C -> 0x150B）
         print(f"正在开启 Notify: {CHAR_NOTIFY_UUID}")
         try:
             await client.start_notify(CHAR_NOTIFY_UUID, notification_handler)
@@ -80,13 +80,13 @@ async def main():
             print(f"开启 Notify 失败: {e}")
             return
 
-        # 4. 发送 B0 指令（写入 0x150A），启动主动气压上报
+        # 4. 发送正确的启动指令到 0x180C -> 0x150A
         print(f"发送数据: {B0_CMD.hex()} -> 特征 {CHAR_WRITE_UUID}", flush=True)
         try:
             await client.write_gatt_char(CHAR_WRITE_UUID, B0_CMD, response=False)
-            print("B0 指令已发送，等待接收气压数据...（按 Ctrl+C 停止）")
+            print("启动指令已发送，等待接收气压数据...（按 Ctrl+C 停止）")
         except Exception as e:
-            print(f"发送 B0 指令失败: {e}")
+            print(f"发送指令失败: {e}")
             return
 
         # 5. 保持运行，接收通知
